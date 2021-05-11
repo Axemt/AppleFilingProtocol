@@ -4,6 +4,20 @@ import sys, getopt
 from random import randrange
 import struct
 
+# POG
+#
+# https://developer.apple.com/library/archive/documentation/Networking/Conceptual/AFP/Introduction/Introduction.html
+
+#
+# https://en.wikipedia.org/wiki/Data_Stream_Interface
+#
+
+#
+# Possible docs from open source implementation?
+# https://github.com/mabam/CAP/tree/master/lib/afp
+#
+
+
 session = None
 
 def getOpts(argv):
@@ -29,10 +43,10 @@ def getOpts(argv):
 
     return  (host, port, path)
 
-def DSTEncapsulate(function) -> bytes:
+def DSIEncapsulateCommand(function) -> bytes:
     global session
     
-    def _DSTEncapsulate(*args, **kwargs):
+    def _DSIEncapsulateCommand(*args, **kwargs):
         global session
 
         payload = function(*args, **kwargs)
@@ -42,11 +56,11 @@ def DSTEncapsulate(function) -> bytes:
             session = randrange(0,65536)
 
         ''' 
-        DST Header Format:
+        DSI Header Format:
 
         |----------32 bit---------|
 
-        |-OP 1B-|Comm 1B|-Sess 2B-|
+        |req/rep1B|Comm 1B|Sess 2B|
         |------Offset 4B----------|
         |---Payload Len 4B--------|
         |---Reserved 4B (all 0)---|
@@ -62,10 +76,33 @@ def DSTEncapsulate(function) -> bytes:
                             # I = 4B, unsigned
         return(stru)
 
-    return(_DSTEncapsulate)
+    return(_DSIEncapsulateCommand)
+
+def DSIGetStatus() -> bytes:
+    global session
+
+    if session == None:
+        session = randrange(0,65536)
+
+    stru = struct.pack("!2B H 3I", 0, 3, session, 0, 0, 0)
+                                    # 3 = GetStatus
+
+    return(stru)
 
 
-@DSTEncapsulate
+def DSIOpenSession() -> bytes:
+    global session
+
+    if session == None:
+        session = randrange(0,65536)
+
+    stru = struct.pack("!2B H 3I",0,4,session,0,0,0)
+                                    # 4 = OpenSession
+
+    return(stru)
+
+
+@DSIEncapsulateCommand
 def craft_FPGetSrvParams() -> bytes:
 
     '''
@@ -82,24 +119,31 @@ def craft_FPGetSrvParams() -> bytes:
 def main(argv):
     global session
     host, port, path = getOpts(argv)
-
-    s = socket.socket()
  
     print("> Connecting to AFP in host " + host)
-    s = socket.socket()
-    s.connect((host, port))
+
+    #s = socket.socket()
+    #s.connect((host, port))
     print("> Successfully connected to "+host)
+
+    request = DSIOpenSession()
+    print("Session ID :",session,"("+ hex(session) + ")")
+    print("DSIOpenSession",request)
+    #s.send(request)
+
+    #response = s.recv(4096)
+    #print(response)
+
+    request = DSIGetStatus()
+    print("DSIGetStatus  ",request)
+    #s.send(request)
+
+    #response = s.recv(4096)
+    #print(response)
+
     request = craft_FPGetSrvParams()
-
-    print("Session : " + session)
-
-    print(request)
-
-    s.send(request)
-    s.close()
-    response = s.recv(4096)
-    print(response)
-
+    print("FPGetSrvParams",request)
+    #s.send(request)
 
 
 main(sys.argv[1:])
