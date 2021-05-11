@@ -3,6 +3,7 @@ import os
 import sys, getopt
 from random import randrange
 import struct
+import codecs
 
 # POG
 #
@@ -78,6 +79,40 @@ def DSIEncapsulateCommand(function) -> bytes:
 
     return(_DSIEncapsulateCommand)
 
+
+def DSIDisencapsulateReply(stru: bytes) -> bytes:
+    # we need to know the length of the payload before unpacking
+    # yes I could just slice the bytes array but this allows for error checking and retrieval
+    # of other parameters if they are ever useful
+
+    payloadLen = int.from_bytes(stru[8:12],byteorder="big")
+    
+    formatS = "!2B H 3I" + str(payloadLen)+"s"
+    (_,_,_,resultCode,ReplySize,_,payload) = struct.unpack(formatS,stru)
+    if resultCode != 0:
+        print("\nWARNING: Reply with error code: " + str(resultCode)+"\n")
+    return(payload)
+    
+
+
+def parse_DSIGetStatusReply(struc: bytes):
+    machineOffset = int.from_bytes(struc[:2],"big")
+    machineNameL = struc[machineOffset]
+    machineName = codecs.decode(struc[machineOffset+1: machineOffset+machineNameL+1],"UTF-8")
+    
+def parse_DSIOpenSessionReply(struc: bytes):
+
+    ind = 0
+    lenIndex = 1
+    while(ind < len(struc) and struc[ind] != None):
+        opt = struc[ind]
+        optLen = struc[lenIndex]
+        optVal = int.from_bytes(struc[lenIndex+1:lenIndex+optLen+1],"big")
+        print("Option:",opt,"Option Value:", optVal)
+
+        ind = lenIndex + optLen +1
+        lenIndex = lenIndex + optLen+2
+
 def DSIGetStatus() -> bytes:
     global session
 
@@ -101,6 +136,17 @@ def DSIOpenSession() -> bytes:
 
     return(stru)
 
+def DSICloseSession() -> bytes:
+    global session
+
+    # Session must exist to close it lol
+    if session == None:
+        raise RuntimeError("Cannot close non-existent session")
+
+    stru = struct.pack("!2B H 3I",0,1,session,0,0,0)
+
+    return(stru)
+
 
 @DSIEncapsulateCommand
 def craft_FPGetSrvParams() -> bytes:
@@ -110,40 +156,80 @@ def craft_FPGetSrvParams() -> bytes:
     OP = 0x10 (16); FPGetSrvParams code
     Data = 0x00
     '''
-    
+
     stru = struct.pack("!2B",16,0)
     return(stru)
 
+
+@DSIEncapsulateCommand
+def craft_FPLoginRequest(user: str) -> bytes:
+
+    #
+    # UNFINISHED 
+    #
+    # For login, see:
+    # https://developer.apple.com/library/archive/documentation/Networking/Conceptual/AFP/AFPSecurity/AFPSecurity.html#//apple_ref/doc/uid/TP40000854-CH232-81479
+    #
+    #
+    '''
+    FPLoginRequest
+    OP = 0x12 (18)
+    String (AFP version) = Field Length + "AFP3.3"
+    String (Auth method) = Field Length + "DHX2" # there are more, including no auth but this is what I work with atm
+    String (user to log) = Field Length+ <user>
+    '''
+
+    AFPVer = bytes("AFP3.3","ascii")
+    Auth = bytes("DHX2","ascii")
+    user = bytes(user,"ascii")
+    formatS = "!2B"+str(len(AFPVer))+"s B"+str(len(Auth))+"s B "+str(len(user))+"s"
+
+    stru = struct.pack(formatS,18,len(AFPVer),AFPVer,len(Auth),Auth,len(user),user)
+
+    return(stru)
 
 
 def main(argv):
     global session
     host, port, path = getOpts(argv)
  
-    print("> Connecting to AFP in host " + host)
+    print("> Connecting to AFP in host " + host+"...")
 
-    #s = socket.socket()
-    #s.connect((host, port))
+    s = socket.socket()
+    s.connect((host, port))
     print("> Successfully connected to "+host)
 
-    request = DSIOpenSession()
+    DSIOpenSessionRequest = DSIOpenSession()
     print("Session ID :",session,"("+ hex(session) + ")")
-    print("DSIOpenSession",request)
-    #s.send(request)
+    print("DSIOpenSession          ",DSIOpenSessionRequest)
+    s.send(DSIOpenSessionRequest)
 
-    #response = s.recv(4096)
-    #print(response)
+    Reply = s.recv(4096)
+    DSIOpenSessionReply = DSIDisencapsulateReply(Reply)
+    parse_DSIOpenSessionReply(DSIOpenSessionReply)
 
-    request = DSIGetStatus()
-    print("DSIGetStatus  ",request)
-    #s.send(request)
+    print("DSIOpenSession: Reply   ",DSIOpenSessionReply)
 
-    #response = s.recv(4096)
-    #print(response)
+    DSIGetStatusRequest = DSIGetStatus()
+    print("DSIGetStatus            ",DSIGetStatusRequest)
+    s.send(DSIGetStatusRequest)
 
-    request = craft_FPGetSrvParams()
-    print("FPGetSrvParams",request)
-    #s.send(request)
+    Reply = s.recv(4096)
+    DSIGetStatusReply = DSIDisencapsulateReply(Reply)
+    parse_DSIGetStatusReply(DSIGetStatusReply)
+    print("DSIGetStatus: Reply     ",DSIGetStatusReply)
+
+    FPLoginRequest = craft_FPLoginRequest("abc")
+    print("FPLoginRequest          ",FPLoginRequest)
+    s.send(FPLoginRequest)
+
+    FPLoginReply = s.recv(4096)
+    print("FPLoginReply            ",FPLoginReply)
+
+    closeS = DSICloseSession()
+    print("DSICloseSession         ",closeS)
+    s.send(closeS)
+    s.close()
 
 
 main(sys.argv[1:])
