@@ -1,13 +1,13 @@
 import socket
 import os
 import sys, getopt
-import requests
 from random import randrange
 import struct
 
 session = None
 
 def getOpts(argv):
+    host = port = path = None
     try:
         opts, args = getopt.getopt(sys.argv[1:], "h:p:f", ["host=","port=","Path="])
     except getopt.GetoptError as err:
@@ -29,7 +29,7 @@ def getOpts(argv):
 
     return  (host, port, path)
 
-def DSTEncapsulate(function):
+def DSTEncapsulate(function) -> bytes:
     global session
     
     def _DSTEncapsulate(*args, **kwargs):
@@ -39,14 +39,8 @@ def DSTEncapsulate(function):
         
         # sometimes session ID is represented weirdly when printing, investigate?
         if session == None:
-            session = randrange(0,65535)
+            session = randrange(0,65536)
 
-        stru = struct.pack("!2B H 3I", 0, 2, session, 0, len(payload), 0) + payload
-                            #format string
-                            # ! = network
-                            # B = 1B, unsigned
-                            # H = 2B, unsigned
-                            # I = 4B, unsigned
         ''' 
         DST Header Format:
 
@@ -56,26 +50,31 @@ def DSTEncapsulate(function):
         |------Offset 4B----------|
         |---Payload Len 4B--------|
         |---Reserved 4B (all 0)---|
+
         |-----Payload ??B------...
 
         '''
-
+        stru = struct.pack("!2B H 3I", 0, 2, session, 0, len(payload), 0) + payload
+                            #format string
+                            # ! = network
+                            # B = 1B, unsigned
+                            # H = 2B, unsigned
+                            # I = 4B, unsigned
         return(stru)
 
     return(_DSTEncapsulate)
 
 
 @DSTEncapsulate
-def craft_FPGetSrvParams():
+def craft_FPGetSrvParams() -> bytes:
 
-    stru = struct.pack("!2B",16,0)
-    
     '''
     FPGetSrvParams
     OP = 0x10 (16); FPGetSrvParams code
     Data = 0x00
     '''
-
+    
+    stru = struct.pack("!2B",16,0)
     return(stru)
 
 
