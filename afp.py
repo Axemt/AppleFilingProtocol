@@ -75,6 +75,12 @@ def main(argv):
     #print("FPLoginReply            ",FPLoginReply)
     (ID,g,leng,p,Mb) = afp.parse_FPLoginReply_DHX2(FPLoginReply)
 
+    FPLoginCont = afp.craft_FPLoginCont_DHX2(ID,g,leng,p)
+    s.send(FPLoginCont)
+
+    FPLoginContReply = s.recv(4096)
+    print("FPLoginCont: Reply       ",FPLoginContReply)
+
     closeS = afp.DSICloseSession()
     print("DSICloseSession         ",closeS)
     s.send(closeS)
