@@ -5,7 +5,8 @@ import sys, getopt
 import afpLib as afp
 
 def getOpts(argv):
-    host = port = path = None
+    host = path = None
+    port = 548
     try:
         opts, args = getopt.getopt(sys.argv[1:], "h:p:f", ["host=","port=","Path="])
     except getopt.GetoptError as err:
@@ -32,11 +33,11 @@ def main(argv):
     global session
     host, port, path = getOpts(argv)
  
-    print("> Connecting to AFP in host " + host+"...")
+    print("> Connecting to AFP in host " + host+":"+str(port)+"...")
 
     s = socket.socket()
     s.connect((host, port))
-    print("> Successfully connected to "+host+"\n")
+    print("> Successfully connected to "+host+":"+str(port)+"\n")
 
     DSIGetStatusRequest = afp.DSIGetStatus()
     #print("DSIGetStatus            ",DSIGetStatusRequest)
@@ -67,19 +68,22 @@ def main(argv):
     print("DSIOpenSession: Reply   ",DSIOpenSessionReply)
  
 
-    FPLoginRequest = afp.craft_FPLoginRequest("abc")
+    FPLoginRequest = afp.craft_FPLoginRequest("JJimenez")
     print("FPLoginRequest          ",FPLoginRequest)
     s.send(FPLoginRequest)
 
-    FPLoginReply = s.recv(4096)
+    reply = s.recv(4096)
+    FPLoginReply = afp.DSIDisencapsulateReply(reply)
     #print("FPLoginReply            ",FPLoginReply)
     (ID,g,leng,p,Mb) = afp.parse_FPLoginReply_DHX2(FPLoginReply)
 
-    FPLoginCont = afp.craft_FPLoginCont_DHX2(ID,g,leng,p)
+    FPLoginCont = afp.craft_FPLoginCont_DHX2(ID,g,leng,p,Mb)
     s.send(FPLoginCont)
 
-    FPLoginContReply = s.recv(4096)
-    print("FPLoginCont: Reply       ",FPLoginContReply)
+    reply = s.recv(4096)
+    FPLoginContReply = afp.DSIDisencapsulateReply(reply)
+    print("FPLoginCont: Reply      ",FPLoginContReply)
+    afp.parse_FPLoginContReply_DHX2(FPLoginContReply,ID)
 
     closeS = afp.DSICloseSession()
     print("DSICloseSession         ",closeS)
