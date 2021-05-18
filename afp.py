@@ -68,7 +68,7 @@ def main(argv):
     print("DSIOpenSession: Reply   ",DSIOpenSessionReply)
  
 
-    FPLoginRequest = afp.craft_FPLoginRequest("JJimenez")
+    FPLoginRequest = afp.craft_FPLoginRequest(input("Input user"))
     print("FPLoginRequest          ",FPLoginRequest)
     s.send(FPLoginRequest)
 
